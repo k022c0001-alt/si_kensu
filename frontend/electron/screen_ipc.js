@@ -4,7 +4,7 @@
  * Call registerScreenIpcHandlers() from main_ipc.js.
  */
 
-const { ipcMain } = require("electron");
+const { ipcMain, dialog } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 
@@ -46,6 +46,19 @@ function registerScreenIpcHandlers() {
   ipcMain.handle("screen:parse", async (_event, request) => {
     const response = await callScreenPython(request);
     return response.data ?? response;
+  });
+
+  ipcMain.handle("open-directory-dialog", async (_event) => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openDirectory"],
+      title: "フォルダを選択",
+    });
+    return result;
+  });
+
+  ipcMain.handle("save-file-dialog", async (_event, options) => {
+    const result = await dialog.showSaveDialog(options ?? {});
+    return result;
   });
 }
 

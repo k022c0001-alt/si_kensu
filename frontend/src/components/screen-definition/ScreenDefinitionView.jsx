@@ -87,6 +87,18 @@ export default function ScreenDefinitionView() {
     setRows(toTableRows(data));
   }, [data]);
 
+  const handleSelectDirectory = useCallback(async () => {
+    const api = window.electronAPI;
+    if (api && typeof api.openDirectoryDialog === "function") {
+      const result = await api.openDirectoryDialog();
+      if (!result.canceled && result.filePaths.length > 0) {
+        const dirPath = result.filePaths[0];
+        setRootInput(dirPath);
+        parseDirectory(dirPath);
+      }
+    }
+  }, [parseDirectory]);
+
   const handleParseDirectory = useCallback(() => {
     if (rootInput.trim()) parseDirectory(rootInput.trim());
   }, [rootInput, parseDirectory]);
@@ -126,6 +138,14 @@ export default function ScreenDefinitionView() {
             onChange={(e) => setRootInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleParseDirectory()}
           />
+          <button
+            style={styles.btn}
+            onClick={handleSelectDirectory}
+            disabled={isLoading}
+            title="フォルダ選択ダイアログを開く"
+          >
+            📁 参照
+          </button>
           <button style={styles.btn} onClick={handleParseDirectory} disabled={isLoading}>
             📂 ディレクトリ解析
           </button>

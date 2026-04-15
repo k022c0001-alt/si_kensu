@@ -39,4 +39,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
    */
   fetchScreenDefinition: (request) =>
     ipcRenderer.invoke("screen:parse", request),
+
+  /**
+   * Open a native directory picker dialog.
+   * @returns {Promise<{ canceled: boolean; filePaths: string[] }>}
+   */
+  openDirectoryDialog: () =>
+    ipcRenderer.invoke("open-directory-dialog"),
+
+  /**
+   * Open a native save-file dialog.
+   * @param {Object} options - Electron showSaveDialog options
+   * @returns {Promise<{ canceled: boolean; filePath?: string }>}
+   */
+  saveFileDialog: (options) =>
+    ipcRenderer.invoke("save-file-dialog", options),
 });
