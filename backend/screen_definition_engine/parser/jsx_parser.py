@@ -2,15 +2,25 @@
 
 Parses a single JSX/TSX file and returns a list of UIElement objects
 describing every form element found in the source.
+
+Class-based API
+---------------
+    parser = JSXParser()
+    elements = parser.parse_file('components/UserForm.jsx')
+
+Functional API (retained for backwards compatibility)
+------------------------------------------------------
+    elements = parse_jsx_file('components/UserForm.jsx')
 """
 
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 # ───────────────────────────────────────────────
@@ -194,6 +204,217 @@ def _detect_element_type(tag: str, attrs: Dict[str, str]) -> ElementType:
         return ElementType.CUSTOM
     return ElementType.UNKNOWN
 
+
+# ───────────────────────────────────────────────
+# Class-based API
+# ───────────────────────────────────────────────
+
+class JSXParser:
+    """JSX/TSX UI element extractor with configurable rules.
+
+    Parameters
+    ----------
+    config : dict, optional
+        Override any of the default configuration keys:
+
+        ``standard_elements``
+            Mapping of lowercase HTML tag name → ElementType.
+        ``custom_components``
+            List of well-known PascalCase component names (informational).
+            All PascalCase components not matching ``exclude_patterns`` are
+            extracted as :attr:`ElementType.CUSTOM` regardless of this list.
+        ``exclude_patterns``
+            List of regex pattern strings.  Tags whose source text matches
+            any pattern are skipped.
+        ``comment_regex``
+            (Informational) Regex string describing comment syntax.
+    """
+
+    DEFAULT_CONFIG: Dict[str, Any] = {
+        "standard_elements": {
+            "input": ElementType.INPUT,
+            "button": ElementType.BUTTON,
+            "select": ElementType.SELECT,
+            "textarea": ElementType.TEXTAREA,
+        },
+        "custom_components": [
+            "CustomButton", "FormInput", "FormField", "TextInput", "SelectField",
+        ],
+        "exclude_patterns": [
+            r"<div\b", r"<span\b", r"<Fragment", r"<>", r"<Icon\b",
+        ],
+        "comment_regex": r"//\s*(.+?)(?=\n|$)|/\*\s*([\s\S]*?)\*/",
+    }
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+        cfg: Dict[str, Any] = dict(self.DEFAULT_CONFIG)
+        if config:
+            cfg.update(config)
+        self._config = cfg
+        self._standard_elements: Dict[str, ElementType] = cfg["standard_elements"]
+        self._exclude_patterns: List[re.Pattern] = [
+            re.compile(p) for p in cfg.get("exclude_patterns", [])
+        ]
+
+        # Per-parse state – reset by parse_file()
+        self._source: str = ""
+        self._offsets: List[int] = []
+
+    # ── Public API ────────────────────────────────
+
+    def parse_file(self, file_path: str) -> List[UIElement]:
+        """Parse a JSX/TSX file and return all detected UI elements.
+
+        Parameters
+        ----------
+        file_path : str
+            Absolute or relative path to the source file.
+
+        Returns
+        -------
+        list[UIElement]
+        """
+        path = Path(file_path)
+        try:
+            self._source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            print(
+                f"[JSXParser] Cannot read {file_path}: {exc}",
+                file=sys.stderr,
+            )
+            return []
+        self._build_line_map()
+        return self._extract_elements()
+
+    # ── Private helpers ───────────────────────────
+
+    def _build_line_map(self) -> None:
+        """Populate ``_offsets`` with the byte offset of each line start."""
+        self._offsets = []
+        cumulative = 0
+        for line in self._source.splitlines(keepends=True):
+            self._offsets.append(cumulative)
+            cumulative += len(line)
+
+    def _line_number(self, pos: int) -> int:
+        """Return 1-based line number for byte offset *pos*."""
+        offsets = self._offsets
+        if not offsets:
+            return 1
+        lo, hi = 0, len(offsets) - 1
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if offsets[mid] <= pos:
+                lo = mid
+            else:
+                hi = mid - 1
+        return lo + 1
+
+    def _extract_elements(self) -> List[UIElement]:
+        """Combine standard and custom element results sorted by line."""
+        standard = self._extract_standard_elements()
+        custom = self._extract_custom_components()
+        combined = standard + custom
+        combined.sort(key=lambda e: e.line_number)
+        return combined
+
+    def _extract_comments(self) -> Dict[int, str]:
+        """Return a mapping of comment end-offset → comment text."""
+        result: Dict[int, str] = {}
+        for m in _COMMENT_RE.finditer(self._source):
+            result[m.end()] = m.group("text").strip()
+        for m in _HTML_COMMENT_RE.finditer(self._source):
+            result[m.end()] = m.group("text").strip()
+        return result
+
+    def _extract_standard_elements(self) -> List[UIElement]:
+        """Extract standard HTML form elements (input, button, select, textarea)."""
+        elements: List[UIElement] = []
+        for m in _TAG_RE.finditer(self._source):
+            tag = m.group("tag")
+            tag_lower = tag.lower()
+            if tag_lower not in self._standard_elements:
+                continue
+            attrs = self._parse_attributes(m.group("attrs"))
+            et = self._standard_elements[tag_lower]
+            if tag_lower == "input":
+                t = attrs.get("type", "").lower()
+                if t == "checkbox":
+                    et = ElementType.CHECKBOX
+                elif t == "radio":
+                    et = ElementType.RADIO
+            elem = UIElement(
+                element_id=attrs.get("id", ""),
+                name=attrs.get("name", ""),
+                type=attrs.get("type", ""),
+                component_type=et,
+                required=self._is_required(attrs),
+                placeholder=attrs.get("placeholder", ""),
+                default_value=attrs.get("defaultValue", attrs.get("value", "")),
+                event_handlers=self._extract_event_handlers(attrs),
+                comment=self._extract_preceding_comment(m.start()),
+                line_number=self._line_number(m.start()),
+            )
+            ml_raw = attrs.get("maxLength", attrs.get("maxlength", ""))
+            if ml_raw.isdigit():
+                elem.max_length = int(ml_raw)
+            elements.append(elem)
+        return elements
+
+    def _extract_custom_components(self) -> List[UIElement]:
+        """Extract PascalCase custom components."""
+        elements: List[UIElement] = []
+        for m in _TAG_RE.finditer(self._source):
+            tag = m.group("tag")
+            if not _PASCAL_RE.match(tag):
+                continue
+            if self._should_exclude(m.start()):
+                continue
+            attrs = self._parse_attributes(m.group("attrs"))
+            elem = UIElement(
+                element_id=attrs.get("id", ""),
+                name=attrs.get("name", attrs.get("label", "")),
+                type=attrs.get("type", ""),
+                component_type=ElementType.CUSTOM,
+                required=self._is_required(attrs),
+                placeholder=attrs.get("placeholder", ""),
+                default_value=attrs.get("defaultValue", attrs.get("value", "")),
+                event_handlers=self._extract_event_handlers(attrs),
+                comment=self._extract_preceding_comment(m.start()),
+                line_number=self._line_number(m.start()),
+            )
+            ml_raw = attrs.get("maxLength", attrs.get("maxlength", ""))
+            if ml_raw.isdigit():
+                elem.max_length = int(ml_raw)
+            elements.append(elem)
+        return elements
+
+    def _parse_attributes(self, attrs_str: str) -> Dict[str, str]:
+        """Delegate to module-level attribute parser."""
+        return _parse_attrs(attrs_str)
+
+    def _extract_event_handlers(self, attrs: Dict[str, str]) -> Dict[str, str]:
+        """Delegate to module-level event handler extractor."""
+        return _extract_event_handlers(attrs)
+
+    def _extract_preceding_comment(self, pos: int) -> str:
+        """Delegate to module-level comment extractor."""
+        return _preceding_comment(self._source, pos)
+
+    def _should_exclude(self, pos: int) -> bool:
+        """Return True if the source text at *pos* matches any exclude pattern."""
+        text = self._source[pos : pos + 100]
+        return any(p.match(text) for p in self._exclude_patterns)
+
+    @staticmethod
+    def _is_required(attrs: Dict[str, str]) -> bool:
+        """Delegate to module-level required-attribute checker."""
+        return _is_required(attrs)
+
+
+# ───────────────────────────────────────────────
+# Functional API (backwards compatible)
+# ───────────────────────────────────────────────
 
 def parse_jsx_file(filepath: str) -> List[UIElement]:
     """Parse a JSX/TSX file and return all detected UI elements.
