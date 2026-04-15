@@ -8,6 +8,7 @@
 const { ipcMain } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
+const { registerScreenIpcHandlers } = require("./screen_ipc");
 
 // Path to the Python interpreter (override via env for packaging)
 const PYTHON = process.env.SI_KENSU_PYTHON || "python3";
@@ -79,6 +80,9 @@ function registerIpcHandlers() {
     const response = await callPython("src.main_ipc", req);
     return response.data ?? response;
   });
+
+  // Screen definition engine
+  registerScreenIpcHandlers();
 }
 
 module.exports = { registerIpcHandlers };

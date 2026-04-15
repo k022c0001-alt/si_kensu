@@ -31,4 +31,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
    */
   fetchSequenceData: (request) =>
     ipcRenderer.invoke("sequence:fetchData", request),
+
+  /**
+   * Parse JSX/TSX files for screen element definitions.
+   * @param {Object} request - { action, root?, file?, filter? }
+   * @returns {Promise<Object>}
+   */
+  fetchScreenDefinition: (request) =>
+    ipcRenderer.invoke("screen:parse", request),
 });
