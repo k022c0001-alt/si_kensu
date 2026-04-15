@@ -77,6 +77,16 @@ _ATTR_RE = re.compile(
     r'(?:\s*=\s*(?:"(?P<dq>[^"]*)"|\'(?P<sq>[^\']*)\'|\{(?P<expr>[^}]*)\}))?',
 )
 
+# Tags that are never UI form elements and should be skipped.
+_EXCLUDED_TAGS: frozenset[str] = frozenset([
+    "script", "style", "link", "meta", "head", "html", "body",
+    "div", "span", "p", "h1", "h2", "h3", "h4", "h5", "h6",
+    "ul", "ol", "li", "table", "tr", "td", "th",
+    "form", "label", "a", "img", "svg", "path",
+    "section", "article", "nav", "main", "footer", "header",
+    "aside", "figure", "figcaption", "pre", "code",
+])
+
 # Inline JSX comment preceding a tag  {/* … */}
 _COMMENT_RE = re.compile(r'\{/\*(?P<text>.*?)\*/\}', re.DOTALL)
 
@@ -228,21 +238,15 @@ def parse_jsx_file(filepath: str) -> List[UIElement]:
         tag = m.group("tag")
         attrs_str = m.group("attrs")
 
-        # Skip closing-tag lookalikes and obvious non-element tags
-        if tag.lower() in {"script", "style", "link", "meta", "head", "html", "body", "div",
-                           "span", "p", "h1", "h2", "h3", "h4", "h5", "h6",
-                           "ul", "ol", "li", "table", "tr", "td", "th",
-                           "form", "label", "a", "img", "svg", "path",
-                           "section", "article", "nav", "main", "footer", "header",
-                           "aside", "figure", "figcaption", "pre", "code"}:
+        # Skip excluded structural/non-form tags
+        if tag.lower() in _EXCLUDED_TAGS:
             continue
 
-        et = _detect_element_type(tag, {})
+        # Parse attributes first so element type detection can use them
+        attrs = _parse_attrs(attrs_str)
+        et = _detect_element_type(tag, attrs)
         if et == ElementType.UNKNOWN:
             continue
-
-        attrs = _parse_attrs(attrs_str)
-        et = _detect_element_type(tag, attrs)  # re-detect with attrs (checkbox/radio)
 
         elem = UIElement(
             element_id=attrs.get("id", ""),

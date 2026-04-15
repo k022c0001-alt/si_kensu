@@ -58,10 +58,10 @@ function downloadJSON(rows) {
 function downloadCSV(rows) {
   if (rows.length === 0) return;
   const headers = Object.keys(rows[0]).filter((k) => k !== "id");
-  const escape = (v) => `"${String(v).replace(/"/g, '""')}"`;
+  const escapeCsvValue = (v) => `"${String(v).replace(/"/g, '""')}"`;
   const lines = [
-    headers.map(escape).join(","),
-    ...rows.map((r) => headers.map((h) => escape(r[h] ?? "")).join(",")),
+    headers.map(escapeCsvValue).join(","),
+    ...rows.map((r) => headers.map((h) => escapeCsvValue(r[h] ?? "")).join(",")),
   ];
   const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv" });
   const url = URL.createObjectURL(blob);

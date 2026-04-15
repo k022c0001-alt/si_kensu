@@ -43,12 +43,6 @@ def _has_identifier(elem: UIElement) -> bool:
     return bool(elem.element_id or elem.name)
 
 
-def _has_non_empty_name(elem: UIElement) -> bool:
-    """Combined identifier (id + name) must be non-blank."""
-    combined = (elem.element_id + elem.name).strip()
-    return bool(combined)
-
-
 def _not_ignored_pattern(elem: UIElement) -> bool:
     """Exclude elements whose name/id matches common ignore patterns."""
     combined = elem.element_id + " " + elem.name
