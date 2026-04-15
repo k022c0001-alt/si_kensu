@@ -151,7 +151,7 @@ def main() -> None:
         # Reconstruct UIElement objects for filtering
         rule_set = FilterRuleSet(mode=filter_mode)
 
-        files_output: dict = {}
+        files_output: dict[str, list] = {}
         total_elements = 0
         filtered_elements = 0
         by_type: dict[str, int] = {}
