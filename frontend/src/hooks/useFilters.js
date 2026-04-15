@@ -1,43 +1,48 @@
+/**
+ * useFilters.js
+ * フィルタ設定を管理するカスタムフック
+ */
+
 import { useState, useCallback } from "react";
-import { applySequenceFilter } from "../utils/filterEngine";
+import { applyFilter } from "../utils/filterEngine";
+
+const DEFAULT_OPTIONS = {
+  mode: "detail",
+  includeLayers: null,
+  excludeFuncs: null,
+  deduplicate: true,
+};
 
 /**
- * useFilters – manage filter state and apply it to a list of CallInfo objects.
- *
- * Returns
- * -------
- * filters      : current filter settings object
- * setFilter    : (key, value) => void – update a single filter field
- * applyFilters : (calls) => CallInfo[] – apply current filters to a calls array
- * resetFilters : () => void
+ * @param {object[]} rawCalls SequenceData.calls
+ * @returns {{ filteredCalls, options, setMode, toggleLayer, setDeduplicate }}
  */
-export default function useFilters() {
-  const [filters, setFilters] = useState({
-    mode: "detail",
-    includeLayers: [],
-    excludeLayers: [],
-    includeCallers: [],
-    deduplicate: true,
-  });
+export function useFilters(rawCalls = []) {
+  const [options, setOptions] = useState(DEFAULT_OPTIONS);
 
-  const setFilter = useCallback((key, value) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
+  const filteredCalls = applyFilter(rawCalls, options);
+
+  const setMode = useCallback((mode) => {
+    setOptions((prev) => ({ ...prev, mode }));
   }, []);
 
-  const resetFilters = useCallback(() => {
-    setFilters({
-      mode: "detail",
-      includeLayers: [],
-      excludeLayers: [],
-      includeCallers: [],
-      deduplicate: true,
+  const toggleLayer = useCallback((layer) => {
+    setOptions((prev) => {
+      const current = prev.includeLayers ?? [];
+      const next = current.includes(layer)
+        ? current.filter((l) => l !== layer)
+        : [...current, layer];
+      return { ...prev, includeLayers: next.length > 0 ? next : null };
     });
   }, []);
 
-  const applyFilters = useCallback(
-    (calls) => applySequenceFilter(calls, filters),
-    [filters]
-  );
+  const setDeduplicate = useCallback((value) => {
+    setOptions((prev) => ({ ...prev, deduplicate: value }));
+  }, []);
 
-  return { filters, setFilter, applyFilters, resetFilters };
+  const resetOptions = useCallback(() => {
+    setOptions(DEFAULT_OPTIONS);
+  }, []);
+
+  return { filteredCalls, options, setMode, toggleLayer, setDeduplicate, resetOptions };
 }

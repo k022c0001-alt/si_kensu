@@ -1,2 +1,1 @@
-# si_kensu backend – no external dependencies required.
-# All standard-library only.
+pytest>=7.0

@@ -1,0 +1,22 @@
+/*
+ * SequenceDiagram.module.css
+ * CSS Module styles for SequenceDiagram component
+ * (Inline styles are the primary styling; this file provides override hooks)
+ */
+
+.page {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  font-family: 'Helvetica Neue', Arial, 'Hiragino Sans', sans-serif;
+}
+
+.diagramContainer {
+  overflow: auto;
+}
+
+.diagramContainer svg {
+  max-width: 100%;
+  height: auto;
+}

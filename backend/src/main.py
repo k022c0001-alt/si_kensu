@@ -1,83 +1,86 @@
-"""CLI entry point for the Sequence diagram engine."""
+"""
+main.py
+CLI エントリーポイント
 
-from __future__ import annotations
+使用例:
+  python -m src.main <target_dir> [output_file] [--mode detail|summary|custom] [--format json|mermaid]
+"""
 
-import argparse
 import sys
-from pathlib import Path
+import argparse
 
-from .sequence.analyzer import SequenceAnalyzer
-from .sequence.filter import SequenceFilter
-from .output.exporter import SequenceExporter
+from .sequence.analyzer import analyze_directory
+from .sequence.filter import apply_filter
+from .output.exporter import export_json, export_mermaid
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        prog="si_kensu",
-        description="Analyse source code and generate Sequence diagrams.",
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="ソースコードを解析してシーケンス図を生成します"
     )
-    p.add_argument("root", help="Root directory to analyse")
-    p.add_argument(
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default=".",
+        help="解析対象のディレクトリ（デフォルト: カレントディレクトリ）",
+    )
+    parser.add_argument(
+        "output",
+        nargs="?",
+        default="sequence_data.json",
+        help="出力ファイルパス（デフォルト: sequence_data.json）",
+    )
+    parser.add_argument(
         "--mode",
         choices=["detail", "summary", "custom"],
         default="detail",
-        help="Filter mode (default: detail)",
+        help="フィルタモード（デフォルト: detail）",
     )
-    p.add_argument(
-        "--include-layers",
-        nargs="*",
-        metavar="LAYER",
-        help="Layer whitelist for custom mode (UI API DB Util App)",
-    )
-    p.add_argument(
-        "--exclude-layers",
-        nargs="*",
-        metavar="LAYER",
-        help="Layer blacklist for custom mode",
-    )
-    p.add_argument(
+    parser.add_argument(
         "--format",
         choices=["json", "mermaid"],
-        default="mermaid",
-        help="Output format (default: mermaid)",
+        default="json",
+        help="出力フォーマット（デフォルト: json）",
     )
-    p.add_argument("--output", "-o", help="Output file path (default: stdout)")
-    p.add_argument(
-        "--no-dedup",
-        action="store_true",
-        help="Disable deduplication of identical calls",
+    parser.add_argument(
+        "--include-layers",
+        nargs="+",
+        metavar="LAYER",
+        help="custom モード: 含めるレイヤー名（例: api db）",
     )
-    return p
-
-
-def main(argv=None) -> None:
-    parser = _build_parser()
-    args = parser.parse_args(argv)
-
-    analyzer = SequenceAnalyzer()
-    seq_filter = SequenceFilter()
-    exporter = SequenceExporter()
-
-    data = analyzer.analyze(args.root)
-
-    filtered = seq_filter.filter(
-        data,
-        mode=args.mode,
-        include_layers=args.include_layers,
-        exclude_layers=args.exclude_layers,
-        deduplicate=not args.no_dedup,
+    parser.add_argument(
+        "--exclude-funcs",
+        nargs="+",
+        metavar="PATTERN",
+        help="custom モード: 除外する関数名の正規表現パターン",
     )
+    return parser.parse_args(argv)
 
-    if args.format == "json":
-        output = exporter.to_json(filtered)
+
+def main(argv=None):
+    args = parse_args(argv)
+
+    print(f"Scanning: {args.target}")
+    data = analyze_directory(args.target)
+    print(f"  {len(data.source_files)} files parsed, {len(data.calls)} calls found.")
+
+    # フィルタ適用
+    filtered_calls = apply_filter(
+        calls          = data.calls,
+        mode           = args.mode,
+        include_layers = args.include_layers,
+        exclude_funcs  = args.exclude_funcs,
+    )
+    print(f"  {len(filtered_calls)} calls after filter (mode={args.mode}).")
+
+    # 出力
+    if args.format == "mermaid":
+        output = args.output
+        if not output.endswith(".mmd"):
+            output = output.rsplit(".", 1)[0] + ".mmd"
+        export_mermaid(data, output, filtered_calls)
     else:
-        output = exporter.to_mermaid(filtered)
-
-    if args.output:
-        Path(args.output).write_text(output, encoding="utf-8")
-        print(f"Wrote output to {args.output}", file=sys.stderr)
-    else:
-        print(output)
+        export_json(data, args.output)
 
 
 if __name__ == "__main__":

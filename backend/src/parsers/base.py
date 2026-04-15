@@ -1,36 +1,29 @@
-"""Base data classes for sequence diagram parsing."""
+"""
+base.py
+共通データ構造の定義
+
+CallInfo: 個々の関数呼び出し情報
+SequenceData: 解析結果の集合
+"""
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Optional
 
 
 @dataclass
 class CallInfo:
-    """Represents a single function/method call."""
-
-    caller: str
-    callee: str
-    function: str
-    file: str
-    line: int
-    layer_caller: Optional[str] = None
-    layer_callee: Optional[str] = None
+    caller_file: str        # 呼び出し元ファイル名（拡張子なし）
+    caller_func: str        # 呼び出し元関数名（トップレベルは "__module__"）
+    callee_object: str      # 呼び出し先オブジェクト/クラス名（例: "api", "self"）
+    callee_func: str        # 呼び出し先関数名（例: "fetch_user"）
+    line: int               # ソース内の行番号
+    layer: str              # レイヤー分類: "ui" / "api" / "db" / "util" / "unknown"
+    note: Optional[str] = None  # 直前コメントから抽出したNote
 
 
 @dataclass
 class SequenceData:
-    """Aggregated sequence data for a parsed project."""
-
-    calls: List[CallInfo] = field(default_factory=list)
-    files: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
-
-    def add_call(self, call: CallInfo) -> None:
-        self.calls.append(call)
-
-    def add_file(self, path: str) -> None:
-        if path not in self.files:
-            self.files.append(path)
-
-    def add_error(self, message: str) -> None:
-        self.errors.append(message)
+    participants: list = field(default_factory=list)    # 登場するアクター一覧
+    calls: list = field(default_factory=list)           # CallInfo のリスト（dict化）
+    notes: list = field(default_factory=list)           # {actor, text, line} のリスト
+    source_files: list = field(default_factory=list)    # 解析したファイルパス

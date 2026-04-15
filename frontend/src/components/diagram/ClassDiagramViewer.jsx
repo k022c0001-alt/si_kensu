@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import useMermaid from "../../hooks/useMermaid";
+import { useMermaid } from "../../hooks/useMermaid";
 import useDiagramData from "../../hooks/useDiagramData";
 import { buildClassDiagram } from "../../utils/mermaidBuilder";
 
@@ -26,7 +26,7 @@ export default function ClassDiagramViewer({
   });
 
   const mermaidSrc = data ? buildClassDiagram(data) : "";
-  const { containerRef, error: renderError, isLoading: renderLoading } =
+  const { containerRef, error: renderError, isRendering: renderLoading } =
     useMermaid(mermaidSrc);
 
   const isLoading = dataLoading || renderLoading;

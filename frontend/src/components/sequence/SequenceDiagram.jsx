@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import useMermaid from "../../hooks/useMermaid";
-import useFilters from "../../hooks/useFilters";
+import { useMermaid } from "../../hooks/useMermaid";
+import { useFilters } from "../../hooks/useFilters";
 import { buildSequenceDiagram } from "../../utils/mermaidBuilder";
 
 /**
@@ -12,11 +12,11 @@ import { buildSequenceDiagram } from "../../utils/mermaidBuilder";
  * title   : optional diagram title string
  */
 export default function SequenceDiagram({ calls = [], title = "Sequence Diagram" }) {
-  const { filters, setFilter, applyFilters } = useFilters();
-  const filteredCalls = applyFilters(calls);
+  const { filteredCalls, options: filters, setMode, toggleLayer, setDeduplicate } =
+    useFilters(calls);
   const mermaidSrc = buildSequenceDiagram(filteredCalls);
 
-  const { containerRef, error, isLoading } = useMermaid(mermaidSrc);
+  const { containerRef, error, isRendering: isLoading } = useMermaid(mermaidSrc);
 
   return (
     <div className="sequence-diagram-wrapper" style={styles.wrapper}>
@@ -27,7 +27,7 @@ export default function SequenceDiagram({ calls = [], title = "Sequence Diagram"
       </div>
 
       {/* Filter controls */}
-      <FilterPanel filters={filters} setFilter={setFilter} calls={calls} />
+      <FilterPanel filters={filters} setMode={setMode} toggleLayer={toggleLayer} setDeduplicate={setDeduplicate} calls={calls} />
 
       {/* Diagram area */}
       <div style={styles.diagramArea}>
@@ -48,8 +48,13 @@ export default function SequenceDiagram({ calls = [], title = "Sequence Diagram"
 /* Filter panel                                                          */
 /* ------------------------------------------------------------------ */
 
-function FilterPanel({ filters, setFilter, calls }) {
-  const layers = [...new Set(calls.map((c) => c.layer_caller).filter(Boolean))];
+function FilterPanel({ filters, setMode, toggleLayer, setDeduplicate, calls }) {
+  const layers = [
+    ...new Set(
+      calls.map((c) => c.layer ?? c.layer_caller).filter(Boolean)
+    ),
+  ];
+  const includeLayers = filters.includeLayers ?? [];
 
   return (
     <div style={styles.filterPanel}>
@@ -57,7 +62,7 @@ function FilterPanel({ filters, setFilter, calls }) {
         Mode&nbsp;
         <select
           value={filters.mode}
-          onChange={(e) => setFilter("mode", e.target.value)}
+          onChange={(e) => setMode(e.target.value)}
           style={styles.select}
         >
           <option value="detail">Detail</option>
@@ -72,12 +77,8 @@ function FilterPanel({ filters, setFilter, calls }) {
             <label key={layer} style={styles.checkLabel}>
               <input
                 type="checkbox"
-                checked={!filters.excludeLayers.includes(layer)}
-                onChange={(e) => {
-                  const excluded = filters.excludeLayers.filter((l) => l !== layer);
-                  if (!e.target.checked) excluded.push(layer);
-                  setFilter("excludeLayers", excluded);
-                }}
+                checked={includeLayers.length === 0 || includeLayers.includes(layer)}
+                onChange={() => toggleLayer(layer)}
               />
               &nbsp;{layer}
             </label>
@@ -89,7 +90,7 @@ function FilterPanel({ filters, setFilter, calls }) {
         <input
           type="checkbox"
           checked={filters.deduplicate}
-          onChange={(e) => setFilter("deduplicate", e.target.checked)}
+          onChange={(e) => setDeduplicate(e.target.checked)}
         />
         &nbsp;Deduplicate
       </label>

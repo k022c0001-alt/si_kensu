@@ -1,33 +1,28 @@
-"""Layer classifier: assigns UI / API / DB / Util labels to module names."""
+"""
+classifier.py
+ファイル名と関数名からレイヤーを自動分類する
+"""
 
 import re
-from pathlib import Path
 
-# Patterns for each layer (checked in order)
-_LAYER_RULES = [
-    ("UI",   re.compile(r"component|view|page|screen|widget|jsx|tsx|render|ui", re.I)),
-    ("API",  re.compile(r"api|service|client|request|http|rest|graphql|grpc|endpoint", re.I)),
-    ("DB",   re.compile(r"db|dao|repository|model|orm|schema|migration|database|sql|mongo|redis", re.I)),
-    ("Util", re.compile(r"util|helper|tool|common|shared|lib|mixin|decorator|middleware", re.I)),
-]
-
-_DEFAULT_LAYER = "App"
+# レイヤー判定ルール（プロジェクトに合わせて編集可能）
+LAYER_RULES = {
+    "ui":   re.compile(r"(component|page|view|screen|render|handle|\bon[A-Z])", re.I),
+    "api":  re.compile(r"(api|fetch|axios|request|endpoint|route|controller)", re.I),
+    "db":   re.compile(r"(db|dao|repository|model|query|sql|\borm\b|session)", re.I),
+    "util": re.compile(r"(util|helper|formatter|validate|validator|parser|converter)", re.I),
+}
 
 
-def classify_layer(name: str, filepath: str = "") -> str:
-    """Return the layer label for a module *name* (and optional file path).
-
-    The function first checks the *filepath* stem / path segments, then
-    falls back to the bare *name* string.
+def classify_layer(filename: str, funcname: str) -> str:
     """
-    candidates = [name]
-    if filepath:
-        p = Path(filepath)
-        candidates += list(p.parts) + [p.stem]
+    ファイル名と関数名を結合したテキストに LAYER_RULES を適用してレイヤーを返す。
 
-    for candidate in candidates:
-        for layer, pattern in _LAYER_RULES:
-            if pattern.search(candidate):
-                return layer
-
-    return _DEFAULT_LAYER
+    Returns:
+        "ui" | "api" | "db" | "util" | "unknown"
+    """
+    target = filename + " " + funcname
+    for layer, pattern in LAYER_RULES.items():
+        if pattern.search(target):
+            return layer
+    return "unknown"

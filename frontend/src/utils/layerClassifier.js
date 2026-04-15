@@ -1,38 +1,27 @@
 /**
- * layerClassifier.js – JavaScript port of the Python layer classifier.
- *
- * classifyLayer(name, filepath?) -> "UI" | "API" | "DB" | "Util" | "App"
+ * layerClassifier.js
+ * ファイル名・関数名からレイヤーを自動分類する（Python 版 classifier.py と同等）
  */
 
-const LAYER_RULES = [
-  ["UI",   /component|view|page|screen|widget|jsx|tsx|render|ui/i],
-  ["API",  /api|service|client|request|http|rest|graphql|grpc|endpoint/i],
-  ["DB",   /db|dao|repository|model|orm|schema|migration|database|sql|mongo|redis/i],
-  ["Util", /util|helper|tool|common|shared|lib|mixin|decorator|middleware/i],
-];
+const LAYER_RULES = {
+  ui:   /component|page|view|screen|render|handle|\bon[A-Z]/i,
+  api:  /api|fetch|axios|request|endpoint|route|controller/i,
+  db:   /db|dao|repository|model|query|sql|\borm\b|session/i,
+  util: /util|helper|formatter|validate|validator|parser|converter/i,
+};
 
 /**
- * Classify a module name + optional filepath into a layer label.
- *
- * @param {string} name       - module / caller name
- * @param {string} [filepath] - optional file path for extra context
- * @returns {string}
+ * ファイル名と関数名を結合してレイヤーを分類する
+ * @param {string} filename
+ * @param {string} funcname
+ * @returns {"ui"|"api"|"db"|"util"|"unknown"}
  */
-export function classifyLayer(name = "", filepath = "") {
-  const candidates = [name];
-  if (filepath) {
-    const parts = filepath.replace(/\\/g, "/").split("/");
-    candidates.push(...parts);
-    // also push stem without extension
-    const last = parts[parts.length - 1] || "";
-    const stem = last.includes(".") ? last.split(".").slice(0, -1).join(".") : last;
-    if (stem) candidates.push(stem);
+export function classifyLayer(filename, funcname) {
+  const target = `${filename} ${funcname}`;
+  for (const [layer, pattern] of Object.entries(LAYER_RULES)) {
+    if (pattern.test(target)) return layer;
   }
-
-  for (const candidate of candidates) {
-    for (const [layer, pattern] of LAYER_RULES) {
-      if (pattern.test(candidate)) return layer;
-    }
-  }
-  return "App";
+  return "unknown";
 }
+
+export { LAYER_RULES };

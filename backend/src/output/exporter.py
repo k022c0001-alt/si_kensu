@@ -1,77 +1,83 @@
-"""Export sequence data as JSON or Mermaid sequenceDiagram syntax."""
-
-from __future__ import annotations
+"""
+exporter.py
+解析結果を JSON または Mermaid sequenceDiagram テキストに出力する
+"""
 
 import json
-from pathlib import Path
-from typing import Optional
+import re
+from dataclasses import asdict
 
 from ..parsers.base import SequenceData
 
 
-class SequenceExporter:
-    """Convert :class:`SequenceData` to JSON or Mermaid output."""
+# ─────────────────────────────────────────────
+# JSON 出力
+# ─────────────────────────────────────────────
 
-    # ------------------------------------------------------------------ #
-    # JSON
-    # ------------------------------------------------------------------ #
+def export_json(data: SequenceData, output_path: str) -> None:
+    """SequenceData を JSON ファイルに書き出す"""
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(asdict(data), f, ensure_ascii=False, indent=2)
+    print(f"[OK] JSON saved to: {output_path}")
 
-    def to_json(self, data: SequenceData, indent: int = 2) -> str:
-        """Return a JSON string representing *data*."""
-        payload = {
-            "files": data.files,
-            "errors": data.errors,
-            "calls": [
-                {
-                    "caller": c.caller,
-                    "callee": c.callee,
-                    "function": c.function,
-                    "file": c.file,
-                    "line": c.line,
-                    "layer_caller": c.layer_caller,
-                    "layer_callee": c.layer_callee,
-                }
-                for c in data.calls
-            ],
-        }
-        return json.dumps(payload, ensure_ascii=False, indent=indent)
 
-    def save_json(self, data: SequenceData, path: str) -> None:
-        """Write JSON output to *path*."""
-        Path(path).write_text(self.to_json(data), encoding="utf-8")
+def to_json_string(data: SequenceData) -> str:
+    """SequenceData を JSON 文字列として返す"""
+    return json.dumps(asdict(data), ensure_ascii=False, indent=2)
 
-    # ------------------------------------------------------------------ #
-    # Mermaid
-    # ------------------------------------------------------------------ #
 
-    def to_mermaid(self, data: SequenceData) -> str:
-        """Return a Mermaid ``sequenceDiagram`` string."""
-        lines = ["sequenceDiagram"]
-        seen: set = set()
+# ─────────────────────────────────────────────
+# Mermaid sequenceDiagram 出力
+# ─────────────────────────────────────────────
 
-        for call in data.calls:
-            caller = self._sanitize(call.caller or "App")
-            callee = self._sanitize(call.callee or call.caller or "App")
-            label = call.function
+def build_mermaid(data: SequenceData, calls: list = None) -> str:
+    """
+    SequenceData（または絞り込み済み calls リスト）から
+    Mermaid sequenceDiagram テキストを生成する。
 
-            # Declare participants once
-            for participant in (caller, callee):
-                if participant not in seen:
-                    lines.append(f"    participant {participant}")
-                    seen.add(participant)
+    Args:
+        data: SequenceData（participants 一覧に使用）
+        calls: 出力対象の呼び出しリスト。None の場合は data.calls を使用。
+    """
+    if calls is None:
+        calls = data.calls
 
-            lines.append(f"    {caller}->>+{callee}: {label}()")
-            lines.append(f"    {callee}-->>-{caller}: return")
+    lines = ["sequenceDiagram"]
 
-        return "\n".join(lines)
+    # 参加者宣言
+    for participant in data.participants:
+        if participant and participant not in ("?", ""):
+            lines.append(f"    participant {_safe_name(participant)}")
 
-    def save_mermaid(self, data: SequenceData, path: str) -> None:
-        """Write Mermaid output to *path*."""
-        Path(path).write_text(self.to_mermaid(data), encoding="utf-8")
+    lines.append("")
 
-    # ------------------------------------------------------------------ #
+    # 呼び出し矢印
+    for call in calls:
+        caller = _safe_name(call.get("caller_file", "unknown"))
+        callee = _safe_name(call.get("callee_object", "unknown"))
+        func   = call.get("callee_func", "")
+        note   = call.get("note")
 
-    @staticmethod
-    def _sanitize(name: str) -> str:
-        """Replace characters that Mermaid cannot handle in participant names."""
-        return name.replace("<", "").replace(">", "").replace('"', "").replace(":", "_")
+        if note:
+            lines.append(f"    Note over {caller},{callee}: {note}")
+
+        lines.append(f"    {caller}->>{callee}: {func}()")
+
+    return "\n".join(lines)
+
+
+def export_mermaid(data: SequenceData, output_path: str, calls: list = None) -> None:
+    """Mermaid テキストをファイルに書き出す"""
+    text = build_mermaid(data, calls)
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(text)
+    print(f"[OK] Mermaid saved to: {output_path}")
+
+
+# ─────────────────────────────────────────────
+# ユーティリティ
+# ─────────────────────────────────────────────
+
+def _safe_name(name: str) -> str:
+    """Mermaid のラベルに使えない文字を除去する"""
+    return re.sub(r"[^a-zA-Z0-9_]", "_", name)
