@@ -92,3 +92,54 @@ export function applyFilter(calls, options = {}) {
 
   return result;
 }
+
+// Alias for compatibility with Class diagram / new-style CallInfo schema
+// (caller / callee / function / layer_caller / layer_callee)
+export function applySequenceFilter(calls, filters = {}) {
+  const {
+    mode = "detail",
+    includeLayers = [],
+    excludeLayers = [],
+    includeCallers = [],
+    deduplicate = true,
+  } = filters;
+
+  const excludeFuncs = null;
+  const includeLayersOpt = includeLayers.length > 0 ? includeLayers : null;
+
+  // Map new-style calls to old-style keys if needed
+  const normalized = calls.map((c) => ({
+    ...c,
+    callee_func: c.callee_func ?? c.function ?? "",
+    callee_object: c.callee_object ?? c.callee ?? "",
+    caller_file: c.caller_file ?? c.caller ?? "",
+    layer: c.layer ?? c.layer_caller ?? "unknown",
+  }));
+
+  let result = applyFilter(normalized, {
+    mode,
+    includeLayers: includeLayersOpt,
+    excludeFuncs,
+    deduplicate,
+  });
+
+  // Apply exclude layers
+  if (excludeLayers.length > 0) {
+    const excSet = new Set(excludeLayers);
+    result = result.filter(
+      (c) =>
+        !excSet.has(c.layer ?? c.layer_caller ?? "unknown") &&
+        !excSet.has(c.layer_callee ?? "unknown")
+    );
+  }
+
+  // Apply includeCallers
+  if (includeCallers.length > 0) {
+    const callerSet = new Set(includeCallers);
+    result = result.filter(
+      (c) => callerSet.has(c.caller_file ?? c.caller ?? "")
+    );
+  }
+
+  return result;
+}
