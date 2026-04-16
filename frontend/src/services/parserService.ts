@@ -16,9 +16,26 @@ export interface ScreenParseResponse {
   error?: string;
 }
 
-function getAPI(): typeof window.electronAPI | null {
+export interface OpenDialogResult {
+  canceled: boolean;
+  filePaths: string[];
+}
+
+export interface SaveDialogResult {
+  canceled: boolean;
+  filePath?: string;
+}
+
+/** Extended electronAPI shape that includes the dialog methods. */
+interface ElectronAPIWithDialogs {
+  fetchScreenDefinition: (req: ScreenParseRequest) => Promise<unknown>;
+  openDirectoryDialog: () => Promise<OpenDialogResult>;
+  saveFileDialog: (options: Record<string, unknown>) => Promise<SaveDialogResult>;
+}
+
+function getAPI(): ElectronAPIWithDialogs | null {
   if (typeof window !== "undefined" && window.electronAPI) {
-    return window.electronAPI;
+    return window.electronAPI as unknown as ElectronAPIWithDialogs;
   }
   return null;
 }
@@ -36,5 +53,33 @@ export async function fetchScreenDefinition(
     return { data: result };
   } catch (err) {
     return { error: String(err) };
+  }
+}
+
+/** Open a native directory picker dialog. */
+export async function openDirectoryDialog(): Promise<OpenDialogResult> {
+  const api = getAPI();
+  if (!api || typeof api.openDirectoryDialog !== "function") {
+    return { canceled: true, filePaths: [] };
+  }
+  try {
+    return await api.openDirectoryDialog();
+  } catch (err) {
+    return { canceled: true, filePaths: [] };
+  }
+}
+
+/** Open a native save-file dialog. */
+export async function saveFileDialog(
+  options?: Record<string, unknown>
+): Promise<SaveDialogResult> {
+  const api = getAPI();
+  if (!api || typeof api.saveFileDialog !== "function") {
+    return { canceled: true };
+  }
+  try {
+    return await api.saveFileDialog(options ?? {});
+  } catch (err) {
+    return { canceled: true };
   }
 }
