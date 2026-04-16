@@ -172,26 +172,33 @@ describe('SequenceDiagram コンポーネント', () => {
     SequenceDiagram = mod.default;
   });
 
+  const SAMPLE_DIAGRAM_DATA = {
+    project_root: '/path/to/project',
+    calls: SAMPLE_CALLS,
+    stats: { total_files: 3, total_calls: 3, filtered_calls: 3 },
+    config: { mode: 'detail', exclude_private: false, exclude_builtins: true },
+  };
+
   test('タイトルが表示される', () => {
     render(
-      <SequenceDiagram calls={SAMPLE_CALLS} title="テストシーケンス図" />
+      <SequenceDiagram diagramData={SAMPLE_DIAGRAM_DATA} title="テストシーケンス図" />
     );
     expect(screen.getByText('テストシーケンス図')).toBeInTheDocument();
   });
 
-  test('calls 数が表示される', () => {
-    render(<SequenceDiagram calls={SAMPLE_CALLS} title="Test" />);
-    expect(screen.getByText(/3 calls/)).toBeInTheDocument();
+  test('stats が表示される', () => {
+    render(<SequenceDiagram diagramData={SAMPLE_DIAGRAM_DATA} title="Test" />);
+    expect(screen.getByText(/Calls: 3/)).toBeInTheDocument();
   });
 
   test('フィルタパネルの Mode セレクトが存在する', () => {
-    render(<SequenceDiagram calls={SAMPLE_CALLS} title="Test" />);
+    render(<SequenceDiagram diagramData={SAMPLE_DIAGRAM_DATA} title="Test" />);
     const selects = document.querySelectorAll('select');
     expect(selects.length).toBeGreaterThan(0);
   });
 
   test('Mode を Summary に変更できる', () => {
-    render(<SequenceDiagram calls={SAMPLE_CALLS} title="Test" />);
+    render(<SequenceDiagram diagramData={SAMPLE_DIAGRAM_DATA} title="Test" />);
     const modeSelect = document.querySelector('select');
     if (modeSelect) {
       fireEvent.change(modeSelect, { target: { value: 'summary' } });
@@ -199,14 +206,13 @@ describe('SequenceDiagram コンポーネント', () => {
     }
   });
 
-  test('calls が空でもクラッシュしない', () => {
-    expect(() =>
-      render(<SequenceDiagram calls={[]} title="Empty" />)
-    ).not.toThrow();
+  test('diagramData が null でも空メッセージが表示される', () => {
+    render(<SequenceDiagram diagramData={null} title="Empty" />);
+    expect(screen.getByText(/データを読み込んでください/)).toBeInTheDocument();
   });
 
   test('フッターが表示される', () => {
-    render(<SequenceDiagram calls={SAMPLE_CALLS} title="Test" />);
+    render(<SequenceDiagram diagramData={SAMPLE_DIAGRAM_DATA} title="Test" />);
     expect(screen.getByText(/si_kensu/)).toBeInTheDocument();
   });
 });
