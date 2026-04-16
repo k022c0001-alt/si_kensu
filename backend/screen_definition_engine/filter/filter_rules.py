@@ -7,7 +7,7 @@ When the condition returns *False*, the element is excluded.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, List
 
 from ..parser.jsx_parser import ElementType, UIElement
@@ -24,8 +24,13 @@ class FilterRule:
     name: str
     condition: Callable[[UIElement], bool]
 
-    def passes(self, element: UIElement) -> bool:
+    def apply(self, element: UIElement) -> bool:
+        """Return True if the element passes this rule."""
         return self.condition(element)
+
+    def passes(self, element: UIElement) -> bool:
+        """Alias for apply() – retained for backwards compatibility."""
+        return self.apply(element)
 
 
 # ───────────────────────────────────────────────
@@ -38,26 +43,85 @@ _IGNORE_PATTERNS = re.compile(
 )
 
 
+def _has_name(elem: UIElement) -> bool:
+    """Element must have a non-empty name."""
+    return bool(elem.name.strip())
+
+
 def _has_identifier(elem: UIElement) -> bool:
-    """Element must have a non-empty id or name."""
-    return bool(elem.element_id or elem.name)
+    """Element must have a non-empty element_id."""
+    return bool(elem.element_id)
 
 
-def _not_ignored_pattern(elem: UIElement) -> bool:
-    """Exclude elements whose name/id matches common ignore patterns."""
-    combined = elem.element_id + " " + elem.name
-    return not bool(_IGNORE_PATTERNS.search(combined))
+def _not_placeholder(elem: UIElement) -> bool:
+    """Exclude elements whose id contains temp/debug/unused patterns."""
+    eid = elem.element_id.lower()
+    return not any(x in eid for x in ["temp", "debug", "unused"])
 
 
-# Default rule set applied by apply_all()
+# Default rule set applied by FilterRuleSet (normal mode)
 DEFAULT_RULES: List[FilterRule] = [
     FilterRule("has_identifier", _has_identifier),
-    FilterRule("not_ignored_pattern", _not_ignored_pattern),
+    FilterRule("not_placeholder", _not_placeholder),
+]
+
+# Strict mode adds the has_name rule on top of the defaults
+STRICT_RULES: List[FilterRule] = [
+    FilterRule("has_name", _has_name),
+    FilterRule("has_identifier", _has_identifier),
+    FilterRule("not_placeholder", _not_placeholder),
 ]
 
 
 # ───────────────────────────────────────────────
-# Apply functions
+# FilterRuleSet
+# ───────────────────────────────────────────────
+
+class FilterRuleSet:
+    """Manage and apply multiple :class:`FilterRule` instances.
+
+    Parameters
+    ----------
+    mode : str
+        ``"strict"`` – applies has_name + has_identifier + not_placeholder.
+        Any other value uses the normal default rules.
+    """
+
+    def __init__(self, mode: str = "normal") -> None:
+        self._rules: List[FilterRule] = []
+        self._mode = mode
+        self._setup_default_rules()
+
+    def _setup_default_rules(self) -> None:
+        """Populate the rule list with defaults based on the current mode."""
+        if self._mode == "strict":
+            self._rules = list(STRICT_RULES)
+        else:
+            self._rules = list(DEFAULT_RULES)
+
+    def add_rule(self, rule: FilterRule) -> None:
+        """Append a custom rule to the set."""
+        self._rules.append(rule)
+
+    def apply_all(self, elements: List[UIElement]) -> List[UIElement]:
+        """Keep elements that satisfy **all** rules (AND logic)."""
+        result = []
+        for elem in elements:
+            if all(r.apply(elem) for r in self._rules):
+                result.append(elem)
+        return result
+
+    def apply_any(self, elements: List[UIElement]) -> List[UIElement]:
+        """Keep elements that satisfy **at least one** rule (OR logic)."""
+        result = []
+        for elem in elements:
+            if any(r.apply(elem) for r in self._rules):
+                result.append(elem)
+        return result
+
+
+# ───────────────────────────────────────────────
+# Functional API (backwards compatible)
 # ───────────────────────────────────────────────
 
 def apply_all(
@@ -82,7 +146,7 @@ def apply_all(
         rules = DEFAULT_RULES
     result = []
     for elem in elements:
-        if all(r.passes(elem) for r in rules):
+        if all(r.apply(elem) for r in rules):
             result.append(elem)
     return result
 
@@ -94,6 +158,6 @@ def apply_any(
     """Keep elements that satisfy **at least one** rule (OR logic)."""
     result = []
     for elem in elements:
-        if any(r.passes(elem) for r in rules):
+        if any(r.apply(elem) for r in rules):
             result.append(elem)
     return result
