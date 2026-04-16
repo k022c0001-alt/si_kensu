@@ -33,7 +33,7 @@
   },
   "jest": {
     "testEnvironment": "jsdom",
-    "setupFilesAfterFramework": [
+    "setupFilesAfterEnv": [
       "@testing-library/jest-dom"
     ],
     "transform": {
