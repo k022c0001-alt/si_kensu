@@ -6,23 +6,33 @@
 
 ```
 backend/
-├── src/
+├── src/                        # Sequence 図エンジン
 │   ├── parsers/
-│   │   ├── base.py              # 共通データ構造 (CallInfo, SequenceData)
-│   │   ├── python_parser.py     # Python AST ベースパーサー
+│   │   ├── base.py             # 共通データ構造 (CallInfo, SequenceData)
+│   │   ├── python_parser.py    # Python AST ベースパーサー
 │   │   └── javascript_parser.py # JS/JSX 正規表現ベースパーサー
 │   ├── layer/
-│   │   └── classifier.py        # レイヤー分類 (ui/api/db/util/unknown)
+│   │   └── classifier.py       # レイヤー分類 (ui/api/db/util/unknown)
 │   ├── sequence/
-│   │   ├── analyzer.py          # ディレクトリ走査・一括解析
-│   │   └── filter.py            # フィルタエンジン (detail/summary/custom)
+│   │   ├── analyzer.py         # ディレクトリ走査・一括解析
+│   │   └── filter.py           # フィルタエンジン (detail/summary/custom)
 │   ├── output/
-│   │   └── exporter.py          # JSON / Mermaid 出力
-│   └── main.py                  # CLI エントリーポイント
+│   │   └── exporter.py         # JSON / Mermaid 出力
+│   └── main.py                 # CLI エントリーポイント
+├── diagram_engine/             # Class 図エンジン
+├── screen_definition_engine/   # 画面項目定義書エンジン
+│   ├── parser/                 # JSXParser / BatchJSXParser
+│   ├── filter/                 # FilterRule / FilterRuleSet
+│   ├── ipc/                    # screen_handler.py (Electron IPC)
+│   └── __init__.py
 └── tests/
     ├── test_parser.py
     ├── test_filter.py
-    └── test_layer_classifier.py
+    ├── test_layer_classifier.py
+    ├── test_screen_definition.py
+    ├── test_jsx_parser.py
+    ├── test_filter_rules.py
+    └── test_screen_handler.py
 ```
 
 ## セットアップ
@@ -34,7 +44,7 @@ pip install -r requirements.txt
 
 ## 使い方
 
-### CLI
+### Sequence 図エンジン CLI
 
 ```bash
 # JSON 出力（detail モード）
@@ -42,29 +52,24 @@ python -m src.main /path/to/project output.json
 
 # Mermaid 出力（summary モード）
 python -m src.main /path/to/project output --mode summary --format mermaid
+```
 
-# custom モード（api と db レイヤーのみ、debug_ 関数を除外）
-python -m src.main /path/to/project output --mode custom \
-    --include-layers api db \
-    --exclude-funcs "^debug_"
+### 画面項目定義書エンジン CLI
+
+```bash
+python screen_definition_engine/ipc/screen_handler.py \
+  '{"action":"parse_directory","root":"/path/to/components"}'
 ```
 
 ### Python API
 
 ```python
-from src.sequence.analyzer import analyze_directory
-from src.sequence.filter import apply_filter
-from src.output.exporter import build_mermaid
+from screen_definition_engine.parser.jsx_parser import JSXParser
 
-# 解析
-data = analyze_directory("./my_project")
-
-# フィルタ
-calls = apply_filter(data.calls, mode="summary")
-
-# Mermaid テキスト生成
-mermaid_text = build_mermaid(data, calls)
-print(mermaid_text)
+parser = JSXParser()
+elements = parser.parse_file('components/UserForm.jsx')
+for elem in elements:
+    print(f"{elem.element_id}: {elem.name}")
 ```
 
 ## テスト
@@ -81,6 +86,7 @@ pytest tests/
 | `.py`  | Python AST（精度高） |
 | `.js`  | 正規表現ベース |
 | `.jsx` | 正規表現ベース |
+| `.tsx` | 正規表現ベース |
 
 ## レイヤー分類
 
@@ -91,3 +97,7 @@ pytest tests/
 | `db`    | db, dao, repository, model, query, sql, orm, session |
 | `util`  | util, helper, formatter, validator, parser, converter |
 | `unknown` | 上記に該当しない場合 |
+
+## アーキテクチャ詳細
+
+[ARCHITECTURE.md](./ARCHITECTURE.md) を参照してください。
